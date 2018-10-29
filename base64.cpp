@@ -11,24 +11,29 @@ QByteArray Base64::decode(const QString& base64)
     }
     QByteArray result;
 
-    for (int i = 0; i < base64.length(); i += 4) {
-        int size = base64.length() - i >= 4 ? 4 : base64.length() - i > 4;
+    int bias = 0;
+
+    for (int i = 0; i + bias < base64.length(); i += 4) {
         char tmp[4];
-        for (int j = 0; j< size; j++) {
-            int idx = i + j;
-            QChar tChar = base64.at(idx);
-            if(!mapping.contains(tChar)) {
+        int size = 4;
+        for (int j = 0; j < size; j++) {
+            int idx = i + j + bias;
+            if (idx >= base64.length()) {
                 size = j;
                 break;
+            }
+            QChar tChar = base64.at(idx);
+            if(!mapping.contains(tChar)) {
+                bias++;
+                j--;
+                continue;
             }
             tmp[j] = mapping[tChar];
         }
         if (size > 1)
             result += char((tmp[0] << 2) | (tmp[1] >> 4));
-
         if (size > 2)
             result += char((tmp[1] << 4) | (tmp[2] >> 2));
-
         if (size > 3)
             result += char((tmp[2] << 6) | (tmp[3] >> 0));
     }

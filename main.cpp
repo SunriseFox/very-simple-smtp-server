@@ -1,5 +1,5 @@
 #include "simplesmtp.h"
-#include "smtpsocket.h"
+#include "mailview.h"
 SMTPSocket* SMTPSocket::_socket = nullptr;
 
 #include <QApplication>
@@ -10,9 +10,6 @@ int main(int argc, char *argv[])
     QApplication a(argc, argv);
     SimpleSMTP w;
     w.show();
-
-    SMTPSocket* socket = SMTPSocket::getSocket();
-    Q_UNUSED(socket);
 
     return a.exec();
 }

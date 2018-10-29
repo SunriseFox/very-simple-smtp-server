@@ -29,16 +29,22 @@ SOURCES += \
         simplesmtp.cpp \
     smtpsocket.cpp \
     base64.cpp \
-    smtpclient.cpp
+    smtpperclient.cpp \
+    mailview.cpp \
+    quotedprintable.cpp
 
 HEADERS += \
         simplesmtp.h \
     smtpsocket.h \
     base64.h \
-    smtpclient.h
+    smtpperclient.h \
+    mailview.h \
+    quotedprintable.h
 
 FORMS += \
-        simplesmtp.ui
+        simplesmtp.ui \
+    smtpperclient.ui \
+    mailview.ui
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

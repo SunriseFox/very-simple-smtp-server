@@ -10,7 +10,9 @@
 #include <QTimer>
 #include <QSet>
 #include <QMap>
+#include <QFile>
 #include <QStringList>
+#include <QDateTime>
 
 typedef QSet<QTcpSocket*> SMTPClients;
 
@@ -25,6 +27,7 @@ private:
     static SMTPSocket* _socket;
     QTcpServer* server;
     SMTPClients clients;
+    bool shouldAcceptNewConnection = true;
 
     struct SMTPClientState {
         int authed = 0;
@@ -61,7 +64,6 @@ protected:
 
     void sendCommand(QTcpSocket* client, int code, const QList<QString>& message);
     void sendCommandSequence(QTcpSocket* client, int code, const QList<QString>& message);
-    void closeClient(QTcpSocket* client);
     void writeToClient(QTcpSocket* client, const QByteArray& array);
 
     bool onRAWDATA(QTcpSocket*, QByteArray);
@@ -78,12 +80,22 @@ protected:
 
 public:
     static SMTPSocket* getSocket();
-    SMTPClients getClients() const;
 
+    SMTPClients getClients() const;
     void sendToAllClients(int code, QList<QString> message);
+    bool startListen();
+    bool resetAllClients();
+    void closeClient(QTcpSocket* client);
 
 signals:
     void clientChanged(SMTPClients);
+    void onServerLog(QString log);
+
+    void onNewClient(QTcpSocket* client);
+    void onWriteToClient(QTcpSocket* client, QByteArray data);
+    void onReceiveFromClient(QTcpSocket* client, QByteArray data);
+    void onDataSent(QTcpSocket* client, qint64 size, QString filename);
+    void onConnectionClose(QTcpSocket* client);
 
 public slots:
     void handleNewConnection();

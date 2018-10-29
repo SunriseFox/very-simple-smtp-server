@@ -3,14 +3,9 @@
 SMTPSocket::SMTPSocket(QObject *parent) : QObject(parent)
 {
     server = new QTcpServer(this);
-    const int success = server->listen(QHostAddress::Any, 587);
-    if (!success) {
-        qDebug() << "SMTP Server Started failed." << server->errorString();
-        return;
-    }
-    qDebug() << "Server's Ready at: " << server->serverAddress().toString() << server->serverPort();
     connect(server, &QTcpServer::newConnection, this, &SMTPSocket::handleNewConnection);
 }
+
 
 bool SMTPSocket::isNewLine(QByteArray *byteArray)
 {
@@ -28,6 +23,8 @@ void SMTPSocket::processNewCommand(QTcpSocket* client, QByteArray *byteArray)
 
     QString command(*byteArray);
     command = command.trimmed();
+
+    emit(onReceiveFromClient(client, command.replace('\x00', '-').toLatin1()));
 
     qDebug() << "(" << reinterpret_cast<uintptr_t>(client) << ") < " << command;
 
@@ -70,13 +67,16 @@ void SMTPSocket::sendCommandSequence(QTcpSocket *client, int code, const QList<Q
 
 void SMTPSocket::closeClient(QTcpSocket *client)
 {
-    qDebug() << "closing clients" << reinterpret_cast<uintptr_t>(client);
+    if(!clients.contains(client)) return;
+    qDebug() << "closing client" << reinterpret_cast<uintptr_t>(client);
+    onConnectionClose(client);
     client->close();
 }
 
 void SMTPSocket::writeToClient(QTcpSocket *client, const QByteArray &array)
 {
     qDebug() << "(" << reinterpret_cast<uintptr_t>(client) << ") > " << array;
+    emit(onWriteToClient(client, array));
     client->write(array);
 }
 
@@ -87,17 +87,24 @@ bool SMTPSocket::onRAWDATA(QTcpSocket * client, QByteArray bytes)
         if(bytes == ".\r\n") {
             clientState[client].rawDataState = 2;
             clientState[client].beforeParse = nullptr;
+            QFile file(clientState[client].authedName.split("-")[0] + "-" + QString::number(QDateTime::currentMSecsSinceEpoch()) + ".eml");
+            if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+                qDebug() << "[file] failed to open for write.";
+            file.write(clientState[client].data);
+            onDataSent(client, clientState[client].data.size(), file.fileName());
+            clientState[client].data.clear();
             sendCommand(client, 250, {"OK: message queued as", "42"});
             return true;
         } else {
             clientState[client].rawDataState = 0;
-            clientState[client].data.append("\r\n");
+            clientState[client].data.append("\n");
         }
     }
     if(bytes == "\r\n") {
         clientState[client].rawDataState = 1;
+    } else {
+        clientState[client].data.append(bytes.replace("\r\n", "\n"));
     }
-    clientState[client].data.append(bytes);
     return true;
 }
 
@@ -106,6 +113,7 @@ bool SMTPSocket::onAUTH(QTcpSocket * client, QString auth)
     if (clientState[client].authed == 2) {
         QString pass = Base64::decode(auth).replace('\x00', '-');
         sendCommand(client, 235, {"Auth Successful with ", pass});
+        clientState[client].authedName = pass;
         clientState[client].authed = 1;
         clientState[client].beforeHandle = nullptr;
         return true;
@@ -116,6 +124,7 @@ bool SMTPSocket::onAUTH(QTcpSocket * client, QString auth)
             if(array.length() == 3) {
                 QString pass = Base64::decode(array[2]).replace('\x00', '-');
                 sendCommand(client, 235, {"Auth Successful with ", pass});
+                clientState[client].authedName = pass;
                 clientState[client].authed = 1;
                 return true;
             }
@@ -234,13 +243,41 @@ void SMTPSocket::sendToAllClients(int code, QList<QString> message)
     }
 }
 
+bool SMTPSocket::startListen()
+{
+    const int success = server->listen(QHostAddress::Any, 587);
+    if (!success) {
+        QString log = QStringLiteral("SMTP Server Started failed. ") + server->errorString();
+        qDebug() << log;
+        emit(onServerLog(log));
+        return false;
+    }
+    QString log = QStringLiteral("Server's Ready at: ") + server->serverAddress().toString() + QString::number(server->serverPort());
+    qDebug() << "Server's Ready at: " << server->serverAddress().toString() << server->serverPort();
+    emit(onServerLog(log));
+    return true;
+}
+
+bool SMTPSocket::resetAllClients()
+{
+    shouldAcceptNewConnection = false;
+    for (auto& i: clients) {
+        sendCommand(i, 421, {"Service not available, closing transmission channel"});
+        QMetaObject::invokeMethod(this, [=](){this->closeClient(i);}, Qt::QueuedConnection, nullptr);
+    }
+    shouldAcceptNewConnection = true;
+    QMetaObject::invokeMethod(this, [this](){this->handleNewConnection();},Qt::QueuedConnection, nullptr);
+    return true;
+}
+
 
 void SMTPSocket::handleNewConnection()
 {
-    if (!server->hasPendingConnections()) return;
+    if (!shouldAcceptNewConnection || !server->hasPendingConnections()) return;
     QTcpSocket* client = server->nextPendingConnection();
     clients.insert(client);
     clientState[client] = SMTPClientState();
+    emit onNewClient(client);
     uintptr_t clientId = reinterpret_cast<uintptr_t>(client);
     emit clientChanged(clients);
     sendCommand(client, 220, {SERVER_INFO, "ESMTP", QString::number(clientId)});
@@ -268,7 +305,9 @@ void SMTPSocket::handleNewConnection()
         client->close();
     });
     connect(client, &QTcpSocket::aboutToClose, this, [=](){
-        qDebug() <<"[cleanup]" << reinterpret_cast<uintptr_t>(client);
+        QString log = QStringLiteral("[cleanup] ") + QString::number(clientId);
+        qDebug() << log;
+        emit(onServerLog(log));
         if(clients.contains(client) && client->isOpen()) {
            client->deleteLater();
         }
@@ -281,5 +320,6 @@ void SMTPSocket::handleNewConnection()
     } else {
         connectionInfo += address.toString() + ":" + QString::number(client->peerPort());
     }
+    emit(onServerLog(QStringLiteral("[connection] ") + QString::number(clientId) + " from " + connectionInfo));
     qDebug() << "Got connection from" << connectionInfo << "clientId" << clientId;
 }
