@@ -3,7 +3,6 @@
 SMTPSocket* SMTPSocket::_socket = nullptr;
 
 #include <QApplication>
-#include <QSet>
 
 int main(int argc, char *argv[])
 {

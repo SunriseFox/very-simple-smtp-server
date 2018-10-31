@@ -37,6 +37,5 @@ QByteArray Base64::decode(const QString& base64)
         if (size > 3)
             result += char((tmp[2] << 6) | (tmp[3] >> 0));
     }
-    qDebug() << "base64" << result;
     return result;
 }
