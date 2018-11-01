@@ -8,6 +8,10 @@ SimpleSMTP::SimpleSMTP(QWidget *parent) :
     QWidget(parent),
     ui(new Ui::SimpleSMTP)
 {
+
+    // 该类是程序主窗体主类
+    // 但只是通过事件和槽机制，用于显示每个客户端的交互日志
+
     ui->setupUi(this);
     socket = SMTPSocket::getSocket();
     connect(socket, &SMTPSocket::onServerLog, this, [this](QString log){

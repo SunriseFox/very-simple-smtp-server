@@ -2,6 +2,18 @@
 
 SMTPSocket::SMTPSocket(QObject *parent) : QObject(parent)
 {
+    // 该类为服务端的主要处理类，基本占据整个应用程序的事件队列
+
+    // isNewLine: 判断一个命令是否结束
+    // processNewCommand: 将每个命令分发到正确的处理函数
+    // assertNoParams: 按照 SMTP 协议标准，检查函数的参数合乎要求
+    // sendCommand: 向客户端发送单行消息
+    // sendCommandQueue: 向客户端发送多行消息
+    // closeClient: 关闭客户端并释放资源
+    // writeToClient： 向客户端写入消息(底层接口)
+    // on<*>: 具体的处理客户端消息函数
+    // handleNewConnection: 监听客户端连接，并维护每个客户端的状态。
+
     server = new QTcpServer(this);
     connect(server, &QTcpServer::newConnection, this, &SMTPSocket::handleNewConnection);
 }
@@ -9,11 +21,15 @@ SMTPSocket::SMTPSocket(QObject *parent) : QObject(parent)
 
 bool SMTPSocket::isNewLine(QByteArray *byteArray)
 {
+    // isNewLine: 判断一个命令是否结束
+
     return byteArray->endsWith("\n");
 }
 
 void SMTPSocket::processNewCommand(QTcpSocket* client, QByteArray *byteArray)
 {
+    // processNewCommand: 将每个命令分发到正确的处理函数
+
     bool handled = false;
 
     if (clientState[client].beforeParse != nullptr) {
@@ -45,6 +61,8 @@ void SMTPSocket::processNewCommand(QTcpSocket* client, QByteArray *byteArray)
 
 bool SMTPSocket::assertNoParams(QTcpSocket * client, QString params)
 {
+    // assertNoParams: 按照 SMTP 协议标准，检查函数的参数合乎要求
+
     auto list = params.split(" ", QString::SkipEmptyParts);
     if (list.length() != 1) {
         sendCommand(client, 501, {"Syntax error in command or arguments"});
@@ -82,6 +100,9 @@ void SMTPSocket::writeToClient(QTcpSocket *client, const QByteArray &array)
 
 bool SMTPSocket::onRAWDATA(QTcpSocket * client, QByteArray bytes)
 {
+
+    // onRAWDATA: 高优先函数，得到 byteArray 而不是 string，处理客户端的 data 部分，直到遇到 \r\n.\r\n
+
     qDebug() << bytes;
     if(clientState[client].rawDataState == 1) {
         if(bytes == ".\r\n") {
@@ -110,6 +131,8 @@ bool SMTPSocket::onRAWDATA(QTcpSocket * client, QByteArray bytes)
 
 bool SMTPSocket::onAUTH(QTcpSocket * client, QString auth)
 {
+    // onAUTH: 处理用户的身份验证
+
     if (clientState[client].authed == 2) {
         QString pass = Base64::decode(auth).replace('\x00', '-');
         sendCommand(client, 235, {"Auth Successful with ", pass});
@@ -150,6 +173,8 @@ bool SMTPSocket::onDATA(QTcpSocket * client, QString data)
 
 bool SMTPSocket::onEHLO(QTcpSocket * client, QString ehlo)
 {
+    // onEHLO: 向用户表明服务器支持的方法
+
     auto list = ehlo.split(" ");
     list.removeFirst();
     sendCommandSequence(client, 250, {SERVER_INFO, "greets", list.join(" ")});
@@ -273,6 +298,8 @@ bool SMTPSocket::resetAllClients()
 
 void SMTPSocket::handleNewConnection()
 {
+    // handleNewConnection: 处理新的 TCP 链接，建立客户端状态数组，并加以维护。
+
     if (!shouldAcceptNewConnection || !server->hasPendingConnections()) return;
     QTcpSocket* client = server->nextPendingConnection();
     clients.insert(client);

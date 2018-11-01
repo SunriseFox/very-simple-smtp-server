@@ -2,6 +2,11 @@
 
 QByteArray Base64::decode(const QString& base64)
 {
+    // Base64 是将 3 * 8 位转变为 4 * 6 位字符的编码方式
+    // 我们这里做它的逆，只需要将 4 (*6) 个字符变回 3 (*8) 个字符即可
+    // 我们的邮件编码每 176 字符会加入 \r\n，必须忽略
+    // 首先查可见字符表 获得其编号，然后根据每 4 个的编号还原为 3 个字符。
+
     static const QString convert = QStringLiteral("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/");
     static QMap<QChar, char> mapping;
     if(mapping.size() == 0) {
